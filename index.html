@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Phone Sensor Flight Deck</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --sky-blue: #3a7bd5;
+            --ground-brown: #9a7432;
+            --panel-bg: #1c1c1f;
+            --neon-glow: #00ff66;
+            --alert-orange: #ff9900;
+        }
+
+        body {
+            margin: 0;
+            padding: 10px;
+            background-color: #121214;
+            font-family: 'Segoe UI', sans-serif;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        .btn-permission {
+            background: var(--alert-orange);
+            color: black;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 15px 0;
+            box-shadow: 0 4px 15px rgba(255, 153, 0, 0.4);
+            z-index: 999;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            width: 100%;
+            max-width: 450px;
+            background: var(--panel-bg);
+            padding: 15px;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+
+        .instrument-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #252529;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #333;
+        }
+
+        .instrument-label {
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #888;
+        }
+
+        /* --- Artificial Horizon --- */
+        .horizon-gauge {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            border: 5px solid #444;
+            position: relative;
+            overflow: hidden;
+            background: var(--ground-brown);
+        }
+
+        .sky {
+            width: 200%;
+            height: 200%;
+            background: var(--sky-blue);
+            position: absolute;
+            left: -50%;
+            bottom: 50%;
+            transform-origin: center bottom;
+        }
+
+        .pitch-lines {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            bottom: 0;
+        }
+
+        .pitch-line {
+            position: absolute;
+            left: 25%;
+            width: 50%;
+            height: 2px;
+            background: rgba(255,255,255,0.6);
+        }
+
+        .pitch-line::after {
+            content: attr(data-pitch);
+            position: absolute;
+            right: -25px;
+            top: -7px;
+            font-size: 10px;
+        }
+
+        .plane-silhouette {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 130px;
+            height: 130px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* --- Compass --- */
+        .compass-gauge {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            border: 5px solid #444;
+            background: #111;
+            position: relative;
+        }
+
+        .compass-ring {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        .cardinal {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.1rem;
+            transform: translate(-50%, -50%);
+        }
+
+        .north {
+            top: 12%;
+            left: 50%;
+            color: #ff3333;
+        }
+
+        .east {
+            top: 50%;
+            left: 88%;
+        }
+
+        .south {
+            top: 88%;
+            left: 50%;
+        }
+
+        .west {
+            top: 50%;
+            left: 12%;
+        }
+
+        .lubber-line {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 18px;
+            background: var(--neon-glow);
+            z-index: 10;
+        }
+
+        /* --- Map --- */
+        #map {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            border: 5px solid #444;
+            background: #000;
+        }
+
+        .leaflet-control-container {
+            display: none;
+        }
+
+        /* --- Telemetry Overlay --- */
+        .telemetry {
+            display: flex;
+            justify-content: space-around;
+            background: #151518;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            color: var(--neon-glow);
+            border: 1px solid #222;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <button class="btn-permission" id="startSensors">START MOBILE SENSORS</button>
+
+    <div class="dashboard">
+        <div class="instrument-container">
+            <div class="instrument-label">Attitude Indicator</div>
+            <div class="horizon-gauge">
+                <div class="sky" id="skyBg">
+                    <div class="pitch-lines">
+                        <div class="pitch-line" style="bottom: 40px;" data-pitch="20"></div>
+                        <div class="pitch-line" style="bottom: 20px;" data-pitch="10"></div>
+                        <div class="pitch-line" style="bottom: -20px;" data-pitch="-10"></div>
+                        <div class="pitch-line" style="bottom: -40px;" data-pitch="-20"></div>
+                    </div>
+                </div>
+                <svg class="plane-silhouette" viewBox="0 0 100 100">
+                    <path d="M 10,50 L 35,50 M 65,50 L 90,50 M 50,40 L 50,60" stroke="#ffcc00" stroke-width="4" fill="none" stroke-linecap="round" />
+                    <circle cx="50" cy="50" r="4" fill="#ffcc00" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="instrument-container">
+            <div class="instrument-label">Heading Indicator</div>
+            <div class="compass-gauge">
+                <div class="lubber-line"></div>
+                <div class="compass-ring" id="compassRing">
+                    <div class="cardinal north">N</div>
+                    <div class="cardinal east">E</div>
+                    <div class="cardinal south">S</div>
+                    <div class="cardinal west">W</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instrument-container">
+            <div class="instrument-label">Moving Map (Track Up)</div>
+            <div id="map"></div>
+        </div>
+
+        <div class="telemetry">
+            <span>P: <span id="pitchVal">0</span>°</span>
+            <span>R: <span id="rollVal">0</span>°</span>
+            <span>H: <span id="headingVal">0</span>°</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let pitch = 0;
+        let roll = 0;
+        let heading = 0;
+
+        // Default spawn point (Will try to update with real GPS if available)
+        let currentPos = [37.6189, -122.3750];
+        let breadcrumbs = [];
+        let simulationInterval = null;
+
+        const skyBg = document.getElementById('skyBg');
+        const compassRing = document.getElementById('compassRing');
+        const mapEl = document.getElementById('map');
+
+        const pitchVal = document.getElementById('pitchVal');
+        const rollVal = document.getElementById('rollVal');
+        const headingVal = document.getElementById('headingVal');
+        const sensorBtn = document.getElementById('startSensors');
+
+        // Initialize Map
+        const map = L.map('map', {
+            center: currentPos,
+            zoom: 16,
+            zoomControl: false,
+            attributionControl: false
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        const airplaneIcon = L.divIcon({
+            className: 'map-aircraft-icon',
+            html: '<div style="color: #00ff66; font-size: 20px; font-weight: bold; text-shadow: 0 0 4px black;">▲</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        const aircraftMarker = L.marker(currentPos, { icon: airplaneIcon }).addTo(map);
+
+        const breadcrumbTrail = L.polyline([], {
+            color: '#00ff66',
+            weight: 3,
+            opacity: 0.8,
+            dashArray: '5, 5'
+        }).addTo(map);
+
+        // Get actual GPS location if browser allows
+        navigator.geolocation.getCurrentPosition((position) => {
+            currentPos = [position.coords.latitude, position.coords.longitude];
+            map.setView(currentPos, 16);
+            aircraftMarker.setLatLng(currentPos);
+        }, () => console.log('Using default fallback GPS coords'));
+
+        function updateUI() {
+            // Horizon Physics (Clamp values to prevent extreme visual breaks)
+            let visualPitch = Math.max(-45, Math.min(45, pitch));
+            let visualRoll = Math.max(-60, Math.min(60, roll));
+
+            skyBg.style.bottom = `calc(50% + ${visualPitch * 2.2}px)`;
+            skyBg.style.transform = `rotate(${-visualRoll}deg)`;
+
+            // Rotate Compass & Map elements to track absolute heading
+            compassRing.style.transform = `rotate(${-heading}deg)`;
+            mapEl.style.transform = `rotate(${-heading}deg)`;
+
+            pitchVal.innerText = pitch.toFixed(0);
+            rollVal.innerText = roll.toFixed(0);
+            headingVal.innerText = heading.toFixed(0);
+        }
+
+        // Automatic Forward Engine (Moves forward continuously at a speed relative to device pitch)
+        function liveFlightTick() {
+            // Only move forward if the phone is tilted slightly down/forward (Pitch > 5)
+            if (pitch > 5) {
+                const speedFactor = 0.00002 * (pitch / 10);
+                const radians = (heading * Math.PI) / 180;
+
+                const deltaLat = speedFactor * Math.cos(radians);
+                const deltaLng = speedFactor * Math.sin(radians);
+
+                currentPos = [currentPos[0] + deltaLat, currentPos[1] + deltaLng];
+
+                map.setView(currentPos, map.getZoom(), { animate: false });
+                aircraftMarker.setLatLng(currentPos);
+
+                // Add breadcrumbs dynamically
+                breadcrumbs.push([...currentPos]);
+                // Keep the array light on memory
+                if (breadcrumbs.length > 200) breadcrumbs.shift();
+                breadcrumbTrail.setLatLngs(breadcrumbs);
+            }
+        }
+
+        // --- Core Sensor Handler ---
+        function handleOrientation(event) {
+            // 1. Roll (Left/Right tilt)
+            roll = event.gamma;
+
+            // 2. Pitch (Front/Back tilt)
+            pitch = event.beta - 45; // Calibrated assuming you hold the phone at a comfortable 45° view angle
+
+            // 3. Absolute Heading (Compass)
+            if (event.webkitCompassHeading) {
+                heading = event.webkitCompassHeading; // iOS Native Support
+            } else if (event.alpha) {
+                heading = 360 - event.alpha; // Android Fallback (might vary by hardware browser mapping)
+            }
+
+            updateUI();
+        }
+
+        // Permission Trigger Setup
+        sensorBtn.addEventListener('click', async () => {
+            // iOS 13+ requires explicit permission request confirmation
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        activateSensors();
+                    } else {
+                        alert('Permission to hardware sensors denied.');
+                    }
+                } catch (error) {
+                    alert('Sensor Request Error: Make sure you are using an HTTPS connection.');
+                }
+            } else {
+                // Android/Desktop standard implementations
+                activateSensors();
+            }
+        });
+
+        function activateSensors() {
+            window.addEventListener('deviceorientation', handleOrientation, true);
+            sensorBtn.style.display = 'none'; // Clear space once linked
+
+            // Start the continuous motion tick engine
+            if (!simulationInterval) {
+                simulationInterval = setInterval(liveFlightTick, 150);
+            }
+        }
+    </script>
+</body>
+</html>
