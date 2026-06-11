@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Phone Sensor Flight Deck</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    />
     <style>
         :root {
             --sky-blue: #3a7bd5;
@@ -257,7 +262,11 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
     <script>
         let pitch = 0;
         let roll = 0;
@@ -308,7 +317,7 @@
             currentPos = [position.coords.latitude, position.coords.longitude];
             map.setView(currentPos, 16);
             aircraftMarker.setLatLng(currentPos);
-        }, () => console.log('Using default fallback GPS coords'));
+        }, (error) => console.log('GPS unavailable:', error.message, 'Continuing with default coordinates'));
 
         function updateUI() {
             // Horizon Physics (Clamp values to prevent extreme visual breaks)
@@ -359,10 +368,10 @@
             pitch = event.beta - 45; // Calibrated assuming you hold the phone at a comfortable 45° view angle
 
             // 3. Absolute Heading (Compass)
-            if (event.webkitCompassHeading) {
+            if (typeof event.webkitCompassHeading === 'number') {
                 heading = event.webkitCompassHeading; // iOS Native Support
-            } else if (event.alpha) {
-                heading = 360 - event.alpha; // Android Fallback (might vary by hardware browser mapping)
+            } else if (typeof event.alpha === 'number') {
+                heading = (360 - event.alpha + 360) % 360; // Android Fallback (might vary by hardware browser mapping)
             }
 
             updateUI();
